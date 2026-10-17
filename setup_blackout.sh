@@ -1,18 +1,74 @@
 #!/bin/bash
 # =====================================================================
-#  ECE Linux Workshop — Operation Blackout (setup script)
-#  Στήνει ολόκληρο το σενάριο στον φάκελο ~/ece_blackout.
-#  Είναι ασφαλές να τρέξει ξανά: καθαρίζει την προηγούμενη προσπάθεια.
+#  ECE Linux Workshop — OPERATION BLACKOUT
+#
+#  Στήνει το σενάριο στον φάκελο ~/ece_blackout, παίζει τη δραματική
+#  εισαγωγή και αφήνει τον φοιτητή σε ένα ειδικό shell [BLACKOUT]
+#  που ΕΛΕΓΧΕΙ ΜΟΝΟ ΤΟΥ τα 5 στάδια μετά από κάθε εντολή:
+#
+#    1. Backup      : υπάρχει το temp_backup/auth_key.txt (έγινε tar -xzf)
+#    2. Log         : υπάρχει αρχείο με όνομα το node ID (touch OMEGA_99)
+#    3. Rogue CPU   : η διεργασία rogue_surge.sh δεν τρέχει πια (kill)
+#    4. Reboot      : το reboot.sh είναι εκτελέσιμο ΚΑΙ έτρεξε με επιτυχία
+#    5. Κώδικας C   : το voltage_regulator.c κάνει compile και βγάζει 231.00 V
+#
+#  Όταν περάσουν και τα 5: οθόνη επιτυχίας, χρόνος, και αρχείο
+#  ~/ece_blackout/MISSION_COMPLETE.txt.
+#
+#  Για πρόβα χωρίς καθυστερήσεις:  BLACKOUT_FAST=1 bash setup_blackout.sh
+#  Είναι ασφαλές να ξανατρέξει: καθαρίζει την προηγούμενη προσπάθεια.
 # =====================================================================
 
-# Χρώματα
 RED='\033[0;31m'
+BRED='\033[1;31m'
 GREEN='\033[0;32m'
+BGREEN='\033[1;32m'
 CYAN='\033[0;36m'
 YELLOW='\033[1;33m'
+GREY='\033[0;90m'
 NC='\033[0m'
 
 DIR="$HOME/ece_blackout"
+STATE="/tmp/.blackout_state_$(id -u)"
+
+# Αν ο φοιτητής βρίσκεται ήδη μέσα σε challenge, μην το ξαναστήσεις από μέσα.
+if [ -n "$BLACKOUT_ACTIVE" ]; then
+    echo -e "${YELLOW}Είσαι ήδη μέσα στο challenge.${NC}"
+    echo "Για επανεκκίνηση: γράψε  exit  (βγαίνεις από το [BLACKOUT] shell), μετά  cd ~  και ξανατρέξε  bash setup_blackout.sh"
+    exit 1
+fi
+
+# Χωρίς καθυστερήσεις όταν ζητηθεί ή όταν δεν υπάρχει πραγματικό τερματικό.
+FAST=0
+if [ -n "$BLACKOUT_FAST" ] || [ ! -t 1 ]; then FAST=1; fi
+
+pause() { [ "$FAST" = 1 ] || sleep "$1"; }
+
+type_line() {      # εφέ γραφομηχανής:  type_line "κείμενο" [καθυστέρηση ανά χαρακτήρα]
+    local s="$1" d="${2:-0.025}" i
+    if [ "$FAST" = 1 ]; then printf '%s\n' "$s"; return; fi
+    for ((i = 0; i < ${#s}; i++)); do printf '%s' "${s:i:1}"; sleep "$d"; done
+    printf '\n'
+}
+
+boot_ok()   { printf "[  ${BGREEN}OK${NC}  ] %s\n" "$1";   pause "${2:-0.17}"; }
+boot_warn() { printf "[ ${YELLOW}WARN${NC} ] %s\n" "$1";   pause "${2:-0.35}"; }
+boot_fail() { printf "[${BRED}FAILED${NC}] %s\n" "$1";     pause "${2:-0.45}"; }
+
+show_banner() {    # show_banner "χρώμα" "κείμενο banner"  (γραμμή-γραμμή)
+    local col="$1" line
+    while IFS= read -r line; do
+        printf '%b%s%b\n' "$col" "$line" "$NC"
+        pause 0.12
+    done <<< "$2"
+}
+
+BANNER_BLACKOUT='
+  ####   #       ###    ####  #   #   ###   #   #  #####
+  #   #  #      #   #  #      #  #   #   #  #   #    #
+  ####   #      #####  #      ###    #   #  #   #    #
+  #   #  #      #   #  #      #  #   #   #  #   #    #
+  ####   #####  #   #   ####  #   #   ###    ###     #'
 
 # --- ΕΛΕΓΧΟΣ & ΕΓΚΑΤΑΣΤΑΣΗ ΕΡΓΑΛΕΙΩΝ ---------------------------------
 echo -e "${CYAN}>>> SYSTEM CHECK: Επιβεβαίωση απαραίτητων εργαλείων...${NC}"
@@ -43,15 +99,16 @@ else
     echo -e "${GREEN}Όλα τα εργαλεία (gcc, htop, nano) είναι ήδη έτοιμα!${NC}\n"
 fi
 
-sleep 1
+pause 1
 
-# --- ΕΝΑΡΞΗ ΠΡΟΣΟΜΟΙΩΣΗΣ -----------------------------------------------
-echo -e "${RED}>>> INITIATING SYSTEM FAILURE PROTOTYPE...${NC}"
-sleep 1
+# --- ΣΤΗΣΙΜΟ ΤΟΥ ΣΕΝΑΡΙΟΥ ------------------------------------------------
+echo -e "${BRED}>>> INITIATING SYSTEM FAILURE PROTOTYPE...${NC}"
+pause 1
 
-# 0. Καθαρισμός προηγούμενης προσπάθειας (αν το script τρέξει δεύτερη φορά)
+# 0. Καθαρισμός προηγούμενης προσπάθειας
 pkill -f rogue_surge.sh 2> /dev/null
-rm -rf "$DIR" /tmp/rogue_surge.sh
+rm -rf "$DIR" /tmp/rogue_surge.sh "$STATE"
+mkdir -p "$STATE"
 
 # 1. Βασικός φάκελος
 mkdir -p "$DIR"
@@ -88,12 +145,27 @@ while [ "$SECONDS" -lt 3600 ]; do :; done
 EOF
 chmod +x /tmp/rogue_surge.sh
 setsid /tmp/rogue_surge.sh > /dev/null 2>&1 &
+sleep 0.4
+if ps -eo stat=,args= | grep -v '^Z' | grep -q '[r]ogue_surge\.sh'; then
+    : > "$STATE/rogue_started"
+else
+    # Δεν ξεκίνησε: μην αφήσεις τον φοιτητή κολλημένο, θεώρησε το στάδιο 3 λυμένο.
+    echo -e "${YELLOW}(Προσοχή: η rogue διεργασία δεν ξεκίνησε. Το στάδιο 3 θα μετρηθεί ως ολοκληρωμένο.)${NC}"
+    : > "$STATE/stage3"
+fi
 
 # 5. Stage 4: Permissions  (flag: CHM0D_M4STER)
-#    Το reboot.sh αρνείται να δουλέψει όσο τρέχει η rogue διεργασία,
-#    άρα το Stage 3 ελέγχεται αυτόματα.
+#    Αρνείται να δουλέψει: (α) χωρίς δικαίωμα εκτέλεσης, (β) όσο τρέχει η rogue διεργασία.
+#    Όταν πετύχει, αφήνει σημάδι ώστε ο έλεγχος να ξέρει ότι έτρεξε.
 cat << 'EOF' > reboot.sh
 #!/bin/bash
+STATE="/tmp/.blackout_state_$(id -u)"
+if [ ! -x "$0" ]; then
+    echo "ΑΡΝΗΣΗ ΠΡΟΣΒΑΣΗΣ: το reboot.sh δεν έχει δικαίωμα εκτέλεσης (x)."
+    echo "Το σύστημα δεν δέχεται εντολές επανεκκίνησης από αρχείο χωρίς άδεια."
+    echo "Δώσε του δικαίωμα εκτέλεσης και τρέξ' το ως ./reboot.sh"
+    exit 1
+fi
 if ps -eo stat=,args= | grep -v '^Z' | grep -q '[r]ogue_surge\.sh'; then
     echo "ΣΦΑΛΜΑ: Η επανεκκίνηση απέτυχε. Η διεργασία που υπερθερμαίνει το σύστημα τρέχει ακόμα!"
     echo "Βρες την με htop (ταξινόμησε με F6 -> PERCENT_CPU) και τερμάτισέ την με kill <PID>."
@@ -102,6 +174,7 @@ fi
 echo "Εκκίνηση... ΕΠΙΤΥΧΙΑ!"
 echo "Το κλειδί επανεκκίνησης είναι: [CHM0D_M4STER]"
 echo "Τελευταίο βήμα: Διόρθωσε το voltage_regulator.c, κάντο compile και τρέξτο."
+mkdir -p "$STATE" && : > "$STATE/reboot_ok"
 EOF
 chmod -x reboot.sh   # Αφαίρεση δικαιωμάτων εκτέλεσης
 
@@ -134,59 +207,282 @@ cat << 'EOF' > MISSION.txt
 === OPERATION BLACKOUT: Αποστολή ===
 
 Το σύστημα έπεσε. Επανάφερέ το βήμα βήμα.
-Τα στάδια 1, 2, 4 και 5 κρύβουν ένα flag της μορφής [ΚΑΤΙ_ΤΕΤΟΙΟ]. Δείξε το στον εκπαιδευτή.
-Το στάδιο 3 θα το ελέγξει το στάδιο 4.
 
   Στάδιο 1: Το backup σου είναι συμπιεσμένο (system_backup.tar.gz). Άνοιξέ το.
-            Το flag είναι κρυμμένο μέσα του.
   Στάδιο 2: Στον φάκελο logs/ υπάρχει ένα αρχείο με 10.000 γραμμές.
-            Μία από αυτές αναφέρει θανατηφόρο σφάλμα (FATAL). Βρες το node ID.
+            Μία από αυτές αναφέρει θανατηφόρο σφάλμα (FATAL). Βρες το node ID
+            (ό,τι είναι μέσα στις αγκύλες) και δημιούργησε ένα άδειο αρχείο
+            με αυτό το όνομα (χωρίς τις αγκύλες).
   Στάδιο 3: Κάτι καίει την CPU. Βρες το και τερμάτισέ το.
   Στάδιο 4: Το reboot.sh δεν τρέχει. Διόρθωσε το πρόβλημα και τρέξε το.
   Στάδιο 5: Το voltage_regulator.c έχει bugs. Διόρθωσέ τα, κάνε compile και τρέξτο.
 
-Κόλλησες; Πρώτα το Cheat Sheet (στο πρώτο tab, ή: less ~/cheat_sheet.md),
+Το σύστημα ελέγχει μόνο του την πρόοδό σου, μετά από κάθε εντολή.
+Όταν ολοκληρώσεις ένα στάδιο θα το δεις αμέσως. Το prompt δείχνει πρόοδο και χρόνο.
+Στην πορεία θα βρεις κλειδιά της μορφής [ΚΑΤΙ_ΤΕΤΟΙΟ]: δεν χρειάζεται να τα δείξεις.
+
+Γράψε  status  για να δεις πού βρίσκεσαι.
+Κόλλησες; Πρώτα το Cheat Sheet (στο πρώτο tab, ή: less ~/student_cheat_sheet.md),
 μετά <εντολή> --help, μετά man <εντολή>. Καλή επιτυχία!
 EOF
 
-echo -e "${GREEN}>>> SYSTEM FAILURE SIMULATION READY.${NC}\n"
-sleep 1
+echo -e "${BGREEN}>>> SYSTEM FAILURE SIMULATION READY.${NC}\n"
+pause 1.5
 
-# --- ΕΚΚΙΝΗΣΗ ΤΟΥ CHALLENGE -------------------------------------------
-[ -t 1 ] && clear
-echo -e "${RED}"
-echo "  ################################################"
-echo "  #                                              #"
-echo "  #            OPERATION  BLACKOUT               #"
-echo "  #                                              #"
-echo "  ################################################"
-echo -e "${NC}"
-echo -e "${RED}SITUATION REPORT:${NC}"
-echo "Ο κεντρικός server του εργαστηρίου καταρρέει."
-echo "Η κάρτα γραφικών κάηκε. Έχετε μόνο αυτό το τερματικό."
-echo "Μια άγνωστη διεργασία υπερθερμαίνει το σύστημα και ο κώδικας επαναφοράς έχει bugs."
+# =====================================================================
+#  ΔΡΑΜΑΤΙΚΗ ΕΙΣΑΓΩΓΗ
+# =====================================================================
+[ "$FAST" = 1 ] || clear
+
+# Κανονική εκκίνηση του server...
+boot_ok "Started Power Grid Controller"
+boot_ok "Started Cooling & Thermal Management"
+boot_ok "Mounted /dev/ece-lab/data"
+boot_ok "Started Voltage Regulator Service"
+boot_ok "Reached target ECE Lab Server Online" 0.9
+
+# ...και μετά η κατάρρευση.
+boot_warn "Voltage spike detected on the main grid"
+if [ "$FAST" = 1 ]; then
+    printf "[ ${YELLOW}WARN${NC} ] CPU temperature: ${BRED}104°C${NC}\n"
+else
+    for t in 71 78 85 91 97 104; do
+        printf "\r[ ${YELLOW}WARN${NC} ] CPU temperature: ${BRED}%s°C${NC}   " "$t"
+        sleep 0.3
+    done
+    printf '\n'
+fi
+boot_fail "cooling.service: Failed with result 'overload'"
+boot_fail "gpu-display.service: graphics hardware burned out"
+boot_fail "voltage-regulator.service: Unit contains bugs (exit-code 1)" 0.8
 echo
-cat MISSION.txt
+printf "${BRED}"
+type_line "Kernel panic - not syncing: Fatal exception in interrupt handler" 0.02
+type_line "---[ end Kernel panic - not syncing: FATAL_OVERLOAD ]---" 0.02
+printf "${NC}"
+pause 1.8
+
+# Το blackout.
+[ "$FAST" = 1 ] || clear
+pause 2.2
+show_banner "$BRED" "$BANNER_BLACKOUT"
 echo
-echo -e "${YELLOW}Ο χρόνος ξεκινά σε...${NC}"
+pause 0.8
+
+printf "${BRED}"
+type_line "  SITUATION REPORT" 0.04
+printf "${NC}"
+pause 0.4
+type_line "  Ο κεντρικός server του εργαστηρίου κατέρρευσε." 0.02
+type_line "  Η οθόνη γραφικών κάηκε. Έχεις μόνο αυτό το τερματικό." 0.02
+type_line "  Μια άγνωστη διεργασία υπερθερμαίνει το σύστημα," 0.02
+type_line "  και ο κώδικας επαναφοράς έχει bugs." 0.02
+echo
+pause 0.6
+echo -e "${GREY}  ------------------------------------------------------${NC}"
+sed 's/^/  /' MISSION.txt
+echo -e "${GREY}  ------------------------------------------------------${NC}"
+echo
+pause 1.5
+
+echo -e "${YELLOW}  Το ρολόι ξεκινά σε...${NC}"
 for n in 3 2 1; do
-    echo -e "${YELLOW}  $n${NC}"
-    sleep 1
+    if [ "$FAST" = 1 ]; then
+        echo "    $n"
+    else
+        printf "\r${BRED}        ▶▶  %s  ◀◀   ${NC}" "$n"
+        sleep 1
+    fi
 done
-echo -e "${GREEN}ΤΩΡΑ! Είσαι ήδη μέσα στον φάκελο ~/ece_blackout. Καλή επιτυχία!${NC}"
+[ "$FAST" = 1 ] || printf '\n'
+echo -e "${BGREEN}  ► ΞΕΚΙΝΑ ΤΩΡΑ! Είσαι ήδη μέσα στον φάκελο ~/ece_blackout.${NC}"
 echo
 
-# Αφήνουμε τον φοιτητή μέσα στον φάκελο της αποστολής, με ξεχωριστό prompt.
-# (Ένα script δεν μπορεί να αλλάξει τον φάκελο του τερματικού που το έτρεξε,
-#  γι' αυτό ανοίγουμε νέο shell εδώ μέσα. Το "exit" επιστρέφει στο προηγούμενο.)
+# Το ρολόι της αποστολής ξεκινά εδώ.
+printf '%(%s)T\n' -1 > "$STATE/start"
+
+# =====================================================================
+#  ΤΟ SHELL ΤΟΥ CHALLENGE (με αυτόματο έλεγχο σταδίων)
+# =====================================================================
+# Ένα script δεν μπορεί να αλλάξει τον φάκελο του τερματικού που το έτρεξε,
+# γι' αυτό ανοίγουμε νέο shell εδώ μέσα. Το "exit" επιστρέφει στο προηγούμενο.
 if [ -t 0 ] && [ -t 1 ]; then
+    export BLACKOUT_DIR="$DIR" BLACKOUT_STATE="$STATE" BLACKOUT_ACTIVE=1
     RC="$(mktemp)"
-    cat << 'EOF' > "$RC"
+    cat << 'RCEOF' > "$RC"
 [ -f "$HOME/.bashrc" ] && . "$HOME/.bashrc"
-PS1='\[\033[1;31m\][BLACKOUT]\[\033[0m\] \[\033[1;34m\]\w\[\033[0m\]\$ '
-EOF
+
+# ---------- βοηθητικά ----------
+__bo_pause() { [ -n "$BLACKOUT_FAST" ] || sleep "$1"; }
+
+__bo_count() {                      # -> __BO_C = πόσα στάδια έχουν περάσει
+    local n; __BO_C=0
+    for n in 1 2 3 4 5; do [ -f "$BLACKOUT_STATE/stage$n" ] && __BO_C=$((__BO_C + 1)); done
+}
+
+__bo_bar() {                        # -> __BO_BAR = ██░░░
+    local i; __BO_BAR=""
+    for ((i = 1; i <= 5; i++)); do
+        if [ "$i" -le "$1" ]; then __BO_BAR+="█"; else __BO_BAR+="░"; fi
+    done
+}
+
+__bo_time() {                       # -> __BO_T = mm:ss από την έναρξη (παγώνει στη νίκη)
+    local start=0 end s
+    [ -r "$BLACKOUT_STATE/start" ] && read -r start < "$BLACKOUT_STATE/start"
+    if [ -r "$BLACKOUT_STATE/won" ]; then read -r end < "$BLACKOUT_STATE/won"
+    else printf -v end '%(%s)T' -1; fi
+    s=$((end - start)); [ "$s" -lt 0 ] && s=0
+    printf -v __BO_T '%02d:%02d' $((s / 60)) $((s % 60))
+}
+
+# ---------- prompt: [BLACKOUT ██░░░ 03:12] ~/ece_blackout$ ----------
+__bo_ps1() {
+    __bo_count; __bo_time; __bo_bar "$__BO_C"
+    if [ -f "$BLACKOUT_STATE/won" ]; then
+        printf '\001\033[1;32m\002[RESTORED ✔ %s]\001\033[0m\002 ' "$__BO_T"
+    else
+        printf '\001\033[1;31m\002[BLACKOUT %s %s]\001\033[0m\002 ' "$__BO_BAR" "$__BO_T"
+    fi
+}
+PS1='$(__bo_ps1)\[\033[1;34m\]\w\[\033[0m\]\$ '
+
+# ---------- οι έλεγχοι των σταδίων ----------
+__bo_rogue_alive() { ps -eo stat=,args= 2> /dev/null | grep -v '^Z' | grep -q '[r]ogue_surge\.sh'; }
+
+__bo_have() {                       # υπάρχει αρχείο με κάποιο από αυτά τα ονόματα;
+    local nm p
+    for nm in "$@"; do
+        for p in "$BLACKOUT_DIR/$nm" "$BLACKOUT_DIR"/*/"$nm" "$PWD/$nm" "$HOME/$nm"; do
+            [ -e "$p" ] && return 0
+        done
+    done
+    return 1
+}
+
+__bo_t1() {                         # έγινε tar -xzf του backup
+    local p
+    for p in "$BLACKOUT_DIR" "$PWD" "$HOME"; do
+        [ -f "$p/temp_backup/auth_key.txt" ] && return 0
+    done
+    return 1
+}
+
+__bo_t2() { __bo_have OMEGA_99 omega_99 "[OMEGA_99]"; }     # touch <node ID>
+
+__bo_t3() { [ -f "$BLACKOUT_STATE/rogue_started" ] && ! __bo_rogue_alive; }
+
+__bo_t4() { [ -f "$BLACKOUT_STATE/reboot_ok" ] && [ -x "$BLACKOUT_DIR/reboot.sh" ]; }
+
+__bo_t5() {                         # το .c κάνει compile και βγάζει 231.00 V + flag
+    local src="$BLACKOUT_DIR/voltage_regulator.c" stamp="$BLACKOUT_STATE/t5stamp" tmp out
+    [ -f "$src" ] || return 1
+    # Μην ξανακάνεις compile αν το αρχείο δεν άλλαξε από τον τελευταίο έλεγχο.
+    if [ -f "$stamp" ] && [ ! "$src" -nt "$stamp" ]; then return 1; fi
+    touch -d '2 seconds ago' "$stamp"
+    tmp=$(mktemp -d) || return 1
+    out=$(gcc -w -o "$tmp/vr" "$src" 2> /dev/null && timeout 5 "$tmp/vr" 2> /dev/null)
+    rm -rf "$tmp"
+    case "$out" in *231.00*C_H4CKER*) return 0 ;; esac
+    return 1
+}
+
+# ---------- ανακοίνωση σταδίου ----------
+__bo_title=("" "ΤΟ BACKUP ΑΝΟΙΧΤΗΚΕ" "ΤΟ ΘΑΝΑΤΗΦΟΡΟ ΣΦΑΛΜΑ ΕΝΤΟΠΙΣΤΗΚΕ" "Η ΥΠΕΡΘΕΡΜΑΝΣΗ ΣΤΑΜΑΤΗΣΕ" "Η ΕΠΑΝΕΚΚΙΝΗΣΗ ΕΠΙΤΥΧΕ" "Η ΤΑΣΗ ΣΤΑΘΕΡΟΠΟΙΗΘΗΚΕ")
+__bo_msg=(
+    ""
+    "Το κλειδί πρόσβασης έγινε δεκτό. Το σύστημα αναγνωρίζει την ταυτότητά σου."
+    "Ο κόμβος που προκάλεσε την κατάρρευση εντοπίστηκε μέσα σε 10.000 γραμμές."
+    "Η rogue διεργασία τερματίστηκε. Οι ανεμιστήρες αρχίζουν να ησυχάζουν..."
+    "Η επανεκκίνηση ολοκληρώθηκε. Τα φώτα ανάβουν ένα ένα."
+    "231 Volts. Ο νόμος του Ohm νίκησε. Το σύστημα αναπνέει ξανά."
+)
+
+__bo_announce() {
+    local n=$1
+    __bo_count; __bo_bar "$__BO_C"; __bo_time
+    printf '\n\033[1;32m ══════════════════════════════════════════════════\033[0m\n'
+    printf '\033[1;32m ▌ ✔ ΣΤΑΔΙΟ %s/5 ΟΛΟΚΛΗΡΩΘΗΚΕ\033[0m\n' "$n"
+    printf '\033[1;32m ▌ %s\033[0m\n' "${__bo_title[$n]}"
+    printf '\033[0;32m ▌ %s\033[0m\n' "${__bo_msg[$n]}"
+    printf '\033[1;33m ▌ ΠΡΟΟΔΟΣ  %s  %s/5    ⏱ %s\033[0m\n' "$__BO_BAR" "$__BO_C" "$__BO_T"
+    printf '\033[1;32m ══════════════════════════════════════════════════\033[0m\n\n'
+    __bo_pause 0.5
+}
+
+# ---------- η τελική νίκη ----------
+__bo_victory() {
+    local end line
+    printf -v end '%(%s)T' -1
+    echo "$end" > "$BLACKOUT_STATE/won"
+    __bo_time
+    echo
+    printf '[  \033[1;32mOK\033[0m  ] Cooling subsystem online\n';              __bo_pause 0.35
+    printf '[  \033[1;32mOK\033[0m  ] Voltage regulator stable at 231 V\n';     __bo_pause 0.35
+    printf '[  \033[1;32mOK\033[0m  ] Graphics output restored\n';              __bo_pause 0.35
+    printf '[  \033[1;32mOK\033[0m  ] Reached target ECE Lab Server Online\n';  __bo_pause 0.9
+    echo
+    while IFS= read -r line; do
+        printf '\033[1;32m%s\033[0m\n' "$line"
+        __bo_pause 0.12
+    done << 'BANNER'
+  ####   #####   ####  #####   ###   ####   #####  ####
+  #   #  #      #        #    #   #  #   #  #      #   #
+  ####   ####    ###     #    #   #  ####   ####   #   #
+  #  #   #          #    #    #   #  #  #   #      #   #
+  #   #  #####  ####     #     ###   #   #  #####  ####
+BANNER
+    echo
+    printf '\033[1;32m  ΤΟ ΣΥΣΤΗΜΑ ΕΠΑΝΗΛΘΕ. Ο server του εργαστηρίου λειτουργεί ξανά.\033[0m\n'
+    printf '\033[1;32m  MISSION STATUS: SUCCESS  ·  5/5 στάδια  ·  ⏱ %s\033[0m\n' "$__BO_T"
+    echo
+    printf '\033[1;33m  ► Φώναξε τον εκπαιδευτή και δείξε του αυτή την οθόνη.\033[0m\n\n'
+    {
+        echo "OPERATION BLACKOUT — ΟΛΟΚΛΗΡΩΘΗΚΕ"
+        echo "Χρήστης:   $USER"
+        echo "Χρόνος:    $__BO_T"
+        echo "Ημερομηνία: $(date '+%d/%m/%Y %H:%M:%S')"
+    } > "$BLACKOUT_DIR/MISSION_COMPLETE.txt"
+}
+
+# ---------- ο έλεγχος που τρέχει πριν από κάθε prompt ----------
+__bo_check() {
+    local rc=$? n
+    [ -d "$BLACKOUT_STATE" ] || return $rc
+    [ -f "$BLACKOUT_STATE/won" ] && return $rc
+    for n in 1 2 3 4 5; do
+        [ -f "$BLACKOUT_STATE/stage$n" ] && continue
+        if "__bo_t$n"; then
+            : > "$BLACKOUT_STATE/stage$n"
+            __bo_announce "$n"
+        fi
+    done
+    __bo_count
+    [ "$__BO_C" -eq 5 ] && __bo_victory
+    return $rc
+}
+PROMPT_COMMAND="__bo_check${PROMPT_COMMAND:+;$PROMPT_COMMAND}"
+
+# ---------- η εντολή status ----------
+status() {
+    local names=("" "Το backup ανοίγει" "Εντοπισμός θανατηφόρου σφάλματος" "Σταματά η υπερθέρμανση (CPU)" "Επανεκκίνηση συστήματος" "Σταθεροποίηση τάσης (κώδικας C)") n
+    __bo_count; __bo_bar "$__BO_C"; __bo_time
+    printf '\n \033[1;37mΚΑΤΑΣΤΑΣΗ ΑΠΟΣΤΟΛΗΣ\033[0m   %s  %s/5   ⏱ %s\n\n' "$__BO_BAR" "$__BO_C" "$__BO_T"
+    for n in 1 2 3 4 5; do
+        if [ -f "$BLACKOUT_STATE/stage$n" ]; then
+            printf '   \033[1;32m✔\033[0m  Στάδιο %s   %s\n' "$n" "${names[$n]}"
+        else
+            printf '   \033[1;31m✘\033[0m  Στάδιο %s   %s\n' "$n" "${names[$n]}"
+        fi
+    done
+    echo
+}
+
+rm -f "${BASH_SOURCE[0]}"
+RCEOF
     cd "$DIR" || exit 1
     exec bash --rcfile "$RC"
 else
+    echo -e "${YELLOW}Το αυτόματο σύστημα ελέγχου χρειάζεται διαδραστικό τερματικό.${NC}"
     echo -e "${YELLOW}Γράψε:  cd ~/ece_blackout${NC}"
 fi

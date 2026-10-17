@@ -269,7 +269,7 @@ cat << 'EOF' > MISSION.txt
 Όταν ολοκληρώσεις ένα στάδιο θα το δεις αμέσως. Το prompt δείχνει πρόοδο και χρόνο.
 
 Γράψε  status  για να δεις πού βρίσκεσαι.
-Κόλλησες; Πρώτα το Cheat Sheet (στο πρώτο tab, ή: less ~/student_cheat_sheet.md),
+Κόλλησες; Πρώτα το Cheat Sheet (στο πρώτο tab, ή: less ~/cheat_sheet.md),
 μετά <εντολή> --help, μετά man <εντολή>. Καλή επιτυχία!
 EOF
 

@@ -11,7 +11,7 @@
 
 - [ ] Ανέβασε **και τα δύο** αρχεία σε σταθερό URL (GitHub raw, gist ή tinyurl). Το `wget` αποθηκεύει το αρχείο με το όνομα που έχει το link, άρα βεβαιώσου ότι κατεβαίνουν ακριβώς ως `cheat_sheet.md` και `setup_blackout.sh`.
 - [ ] Στο cheat sheet (ενότητες 0 και 6) **δεν** χρειάζεται να αλλάξεις κάτι: τα πραγματικά links θα τα γράψεις στον πίνακα.
-- [ ] **Δοκίμασε** και τις δύο εντολές σε Ubuntu, ίδιο με των φοιτητών: `wget <LINK>/cheat_sheet.md` και `wget <LINK>/setup_blackout.sh && bash setup_blackout.sh`. Σημείωσε πόσο κρατά η εγκατάσταση.
+- [ ] **Δοκίμασε** και τις δύο εντολές σε Ubuntu, ίδιο με των φοιτητών: `wget https://raw.githubusercontent.com/D-Voi/Linux_Tutorial/refs/heads/main/cheat_sheet.md` και `wget https://raw.githubusercontent.com/D-Voi/Linux_Tutorial/refs/heads/main/setup_blackout.sh && bash setup_blackout.sh`. Σημείωσε πόσο κρατά η εγκατάσταση.
 - [ ] Άνοιξε το cheat sheet με `less` και δες πώς φαίνεται (τα markdown tables διαβάζονται ως απλό κείμενο).
 - [ ] Βεβαιώσου ότι όλοι έχουν Linux: εργαστήριο με Ubuntu, ή **WSL2 / VM** στο δικό τους laptop. Στείλε οδηγίες 2-3 μέρες πριν. Οι χρήστες macOS δεν έχουν `apt`, άρα χρειάζονται VM.
 - [ ] Έλεγξε internet (χρειάζεται από το πρώτο λεπτό, για το `wget`) και ότι το `sudo` δουλεύει για τους φοιτητές.
@@ -48,7 +48,7 @@
 | # | Πληκτρολογούμε | Τι λέμε |
 |---|---|---|
 | 0.1 | `Ctrl + Alt + T` | Ανοίγουμε τερματικό. |
-| 0.2 | `wget <LINK>/cheat_sheet.md` | Κατεβάζει ένα αρχείο από το internet, στον φάκελο που είμαστε. Γράφεις το link στον πίνακα. |
+| 0.2 | `wget https://raw.githubusercontent.com/D-Voi/Linux_Tutorial/refs/heads/main/cheat_sheet.md` | Κατεβάζει ένα αρχείο από το internet, στον φάκελο που είμαστε. Γράφεις το link στον πίνακα. |
 | 0.3 | `ls` | Βλέπουμε το `cheat_sheet.md`. "Σε λίγο θα εξηγήσουμε το `ls`." |
 | 0.4 | `less cheat_sheet.md` | Ανοίγει το cheat sheet σελίδα-σελίδα. Κύλιση με ⬆️ ⬇️ ή `Space`. **Μην πατήσετε `q`!** |
 | 0.5 | `Ctrl + Shift + T` | Ανοίγει **δεύτερο tab**. "Εδώ θα δουλεύουμε. Το πρώτο tab μένει ανοιχτό με το cheat sheet." |
@@ -213,7 +213,7 @@ int main() {
 | # | Ενέργεια | Τι λέμε |
 |---|---|---|
 | 6.1 | Γράφεις στον πίνακα: `cd ~` | "Πάντα πρώτα επιστρέφουμε στο home." |
-| 6.2 | Γράφεις στον πίνακα: `wget <ΤΟ-ΠΡΑΓΜΑΤΙΚΟ-LINK> && bash setup_blackout.sh` | "Το `wget` κατεβάζει το αρχείο (το ίδιο που κάναμε για το cheat sheet) και το `bash` το τρέχει." |
+| 6.2 | Γράφεις στον πίνακα: `wget https://raw.githubusercontent.com/D-Voi/Linux_Tutorial/refs/heads/main/setup_blackout.sh && bash setup_blackout.sh` | "Το `wget` κατεβάζει το αρχείο (το ίδιο που κάναμε για το cheat sheet) και το `bash` το τρέχει." |
 | 6.3 | Οι φοιτητές πληκτρολογούν τις δύο εντολές **στο δεύτερο tab** | Αν λείπει κάτι, το script ζητά `sudo` και το εγκαθιστά. |
 | 6.4 | Το script **ξεκινά μόνο του το challenge** | Τυπώνει την αποστολή και τους αφήνει μέσα στον φάκελο `ece_blackout`, με πρόσθετο prompt `[BLACKOUT]`. Δεν χρειάζεται να κάνουν `cd`. |
 | 6.5 | "Το cheat sheet μένει ανοιχτό στο πρώτο tab. Αν κολλήσετε: cheat sheet, μετά `--help`, μετά `man`." | Υπενθύμιση των εργαλείων βοήθειας. |

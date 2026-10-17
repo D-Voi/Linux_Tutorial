@@ -4,13 +4,22 @@
 #
 #  Στήνει το σενάριο στον φάκελο ~/ece_blackout, παίζει τη δραματική
 #  εισαγωγή και αφήνει τον φοιτητή σε ένα ειδικό shell [BLACKOUT]
-#  που ΕΛΕΓΧΕΙ ΜΟΝΟ ΤΟΥ τα 5 στάδια μετά από κάθε εντολή:
+#  που ΕΛΕΓΧΕΙ ΜΟΝΟ ΤΟΥ τα 5 στάδια μετά από κάθε εντολή.
 #
-#    1. Backup      : υπάρχει το temp_backup/auth_key.txt (έγινε tar -xzf)
-#    2. Log         : υπάρχει αρχείο με όνομα το node ID (touch OMEGA_99)
-#    3. Rogue CPU   : η διεργασία rogue_surge.sh δεν τρέχει πια (kill)
-#    4. Reboot      : το reboot.sh είναι εκτελέσιμο ΚΑΙ έτρεξε με επιτυχία
-#    5. Κώδικας C   : το voltage_regulator.c κάνει compile και βγάζει 231.00 V
+#  ΚΑΝΟΝΑΣ: ένα στάδιο περνάει ΜΟΝΟ όταν
+#    (α) έχει γίνει πραγματικά η δουλειά του σταδίου ΚΑΙ
+#    (β) ο φοιτητής έχει φτιάξει άδειο αρχείο με το όνομα του κλειδιού
+#        (touch ΚΛΕΙΔΙ — χωρίς τις αγκύλες).
+#
+#    1. Backup    : tar -xzf (υπάρχει temp_backup/auth_key.txt)  + touch ALPHA_77
+#    2. Log       : βρέθηκε το node ID στο server.log             + touch OMEGA_99
+#    3. Rogue CPU : η rogue_surge.sh δεν τρέχει (kill). Το κλειδί
+#                   της είναι γραμμένο στην εντολή της (htop)      + touch SURG3_K1LL3R
+#    4. Reboot    : reboot.sh εκτελέσιμο ΚΑΙ έτρεξε με επιτυχία   + touch CHM0D_M4STER
+#    5. Κώδικας C : το voltage_regulator.c κάνει compile και βγάζει
+#                   231.00 V. Το κλειδί ΔΕΝ υπάρχει στο .c: τυπώνεται
+#                   από κρυφό header (.core/vault.h) μόνο όταν η τάση
+#                   βγει σωστή                                     + touch C_H4CKER
 #
 #  Όταν περάσουν και τα 5: οθόνη επιτυχίας, χρόνος, και αρχείο
 #  ~/ece_blackout/MISSION_COMPLETE.txt.
@@ -135,8 +144,10 @@ NOW=$(date +%s)
     done
 } > logs/server.log
 
-# 4. Stage 3: The Rogue Process
+# 4. Stage 3: The Rogue Process  (flag: SURG3_K1LL3R)
 #    Καίει έναν πυρήνα CPU, ώστε να φαίνεται πρώτο στο htop (CPU% ~100).
+#    Το κλειδί είναι ορίσμα της εντολής, άρα φαίνεται στη στήλη Command του htop
+#    (και στο ps aux). Το script το αγνοεί.
 #    Σταματά μόνο του μετά από 1 ώρα, για να μη μείνει ξεχασμένο.
 cat << 'EOF' > /tmp/rogue_surge.sh
 #!/bin/bash
@@ -144,14 +155,15 @@ SECONDS=0
 while [ "$SECONDS" -lt 3600 ]; do :; done
 EOF
 chmod +x /tmp/rogue_surge.sh
-setsid /tmp/rogue_surge.sh > /dev/null 2>&1 &
+setsid /tmp/rogue_surge.sh "NODE_KEY=[SURG3_K1LL3R]" > /dev/null 2>&1 &
 sleep 0.4
 if ps -eo stat=,args= | grep -v '^Z' | grep -q '[r]ogue_surge\.sh'; then
     : > "$STATE/rogue_started"
 else
-    # Δεν ξεκίνησε: μην αφήσεις τον φοιτητή κολλημένο, θεώρησε το στάδιο 3 λυμένο.
-    echo -e "${YELLOW}(Προσοχή: η rogue διεργασία δεν ξεκίνησε. Το στάδιο 3 θα μετρηθεί ως ολοκληρωμένο.)${NC}"
-    : > "$STATE/stage3"
+    # Δεν ξεκίνησε: μην αφήσεις τον φοιτητή κολλημένο. Το "rogue_started" δεν
+    # υπάρχει, οπότε το στάδιο 3 θα περνά μόνο με το touch του κλειδιού.
+    echo -e "${YELLOW}(Προσοχή: η rogue διεργασία δεν ξεκίνησε. Το στάδιο 3 θα περάσει με το touch του κλειδιού.)${NC}"
+    : > "$STATE/rogue_started"
 fi
 
 # 5. Stage 4: Permissions  (flag: CHM0D_M4STER)
@@ -180,9 +192,35 @@ chmod -x reboot.sh   # Αφαίρεση δικαιωμάτων εκτέλεση�
 
 # 6. Stage 5: The Buggy C Code  (flag: C_H4CKER)
 #    2 λάθη: ένα συντακτικό (δεν γίνεται compile) κι ένα λογικό (λάθος τάση).
-#    Το τελικό flag τυπώνεται ΜΟΝΟ αν η τάση βγει σωστή.
+#    Το flag ΔΕΝ υπάρχει μέσα στο .c. Βρίσκεται κωδικοποιημένο (XOR) στο κρυφό
+#    header .core/vault.h και τυπώνεται από τη reveal_flag() μόνο όταν η τάση
+#    βγει σωστή. Ούτε το "strings" στο εκτελέσιμο το δείχνει.
+mkdir -p .core
+VAULT_FLAG="C_H4CKER"
+VAULT_BYTES=""
+for ((i = 0; i < ${#VAULT_FLAG}; i++)); do
+    c=$(printf '%d' "'${VAULT_FLAG:i:1}")
+    VAULT_BYTES+=$(printf '0x%02x,' $((c ^ 90)))
+done
+
+cat << VEOF > .core/vault.h
+#ifndef VAULT_H
+#define VAULT_H
+#include <stdio.h>
+
+/* Κρυφό χρηματοκιβώτιο του συστήματος: τυπώνει το κλειδί ασφαλείας. */
+static void reveal_flag(void) {
+    static const unsigned char k[] = { $VAULT_BYTES };
+    size_t i;
+    for (i = 0; i < sizeof k; i++) putchar(k[i] ^ 0x5A);
+}
+
+#endif
+VEOF
+
 cat << 'EOF' > voltage_regulator.c
 #include <stdio.h>
+#include ".core/vault.h"
 
 int main() {
     float I = 10.5; // Ρεύμα σε Αμπέρ
@@ -194,7 +232,9 @@ int main() {
     printf("Υπολογισμένη Τάση: %.2f Volts\n", V)
 
     if (V > 230.9 && V < 231.1) {
-        printf("Η τάση είναι 231.00 Volts, το σύστημα σώθηκε! Το τελικό flag είναι: [C_H4CKER]\n");
+        printf("Η τάση είναι 231.00 Volts, το σύστημα σώθηκε! Το τελικό flag είναι: [");
+        reveal_flag();
+        printf("]\n");
     } else {
         printf("Η τάση δεν είναι σωστή. Το σύστημα παραμένει εκτός λειτουργίας.\n");
     }
@@ -208,18 +248,25 @@ cat << 'EOF' > MISSION.txt
 
 Το σύστημα έπεσε. Επανάφερέ το βήμα βήμα.
 
-  Στάδιο 1: Το backup σου είναι συμπιεσμένο (system_backup.tar.gz). Άνοιξέ το.
+ΠΩΣ ΠΕΡΝΑΕΙ ΕΝΑ ΣΤΑΔΙΟ: κάνε τη δουλειά του σταδίου και βρες το κλειδί του
+(μορφή [ΚΑΤΙ_ΤΕΤΟΙΟ]). Μετά δημιούργησε ένα ΑΔΕΙΟ αρχείο με όνομα το κλειδί,
+χωρίς τις αγκύλες, με την εντολή touch. Το σύστημα περνά το στάδιο μόνο αν
+έχει γίνει και η δουλειά και το αρχείο.
+
+  Στάδιο 1: Το backup σου είναι συμπιεσμένο (system_backup.tar.gz). Άνοιξέ το
+            και διάβασε το κλειδί που κρύβει.
   Στάδιο 2: Στον φάκελο logs/ υπάρχει ένα αρχείο με 10.000 γραμμές.
             Μία από αυτές αναφέρει θανατηφόρο σφάλμα (FATAL). Βρες το node ID
-            (ό,τι είναι μέσα στις αγκύλες) και δημιούργησε ένα άδειο αρχείο
-            με αυτό το όνομα (χωρίς τις αγκύλες).
-  Στάδιο 3: Κάτι καίει την CPU. Βρες το και τερμάτισέ το.
+            (ό,τι είναι μέσα στις αγκύλες). Αυτό είναι το κλειδί σου.
+  Στάδιο 3: Κάτι καίει την CPU. Βρες το και τερμάτισέ το. Η διεργασία
+            κουβαλάει το δικό της κλειδί: διάβασέ το πριν την τερματίσεις!
   Στάδιο 4: Το reboot.sh δεν τρέχει. Διόρθωσε το πρόβλημα και τρέξε το.
-  Στάδιο 5: Το voltage_regulator.c έχει bugs. Διόρθωσέ τα, κάνε compile και τρέξτο.
+  Στάδιο 5: Το voltage_regulator.c έχει bugs. Διόρθωσέ τα, κάνε compile και
+            τρέξτο. Το τελευταίο κλειδί εμφανίζεται ΜΟΝΟ αν το πρόγραμμα
+            δουλέψει σωστά.
 
 Το σύστημα ελέγχει μόνο του την πρόοδό σου, μετά από κάθε εντολή.
 Όταν ολοκληρώσεις ένα στάδιο θα το δεις αμέσως. Το prompt δείχνει πρόοδο και χρόνο.
-Στην πορεία θα βρεις κλειδιά της μορφής [ΚΑΤΙ_ΤΕΤΟΙΟ]: δεν χρειάζεται να τα δείξεις.
 
 Γράψε  status  για να δεις πού βρίσκεσαι.
 Κόλλησες; Πρώτα το Cheat Sheet (στο πρώτο tab, ή: less ~/student_cheat_sheet.md),
@@ -274,7 +321,7 @@ type_line "  SITUATION REPORT" 0.04
 printf "${NC}"
 pause 0.4
 type_line "  Ο κεντρικός server του εργαστηρίου κατέρρευσε." 0.02
-type_line "  Η οθόνη γραφικών κάηκε. Έχεις μόνο αυτό το τερματικό." 0.02
+type_line "  Η κάρτα γραφικών κάηκε. Έχεις μόνο αυτό το τερματικό." 0.02
 type_line "  Μια άγνωστη διεργασία υπερθερμαίνει το σύστημα," 0.02
 type_line "  και ο κώδικας επαναφοράς έχει bugs." 0.02
 echo
@@ -350,32 +397,40 @@ PS1='$(__bo_ps1)\[\033[1;34m\]\w\[\033[0m\]\$ '
 # ---------- οι έλεγχοι των σταδίων ----------
 __bo_rogue_alive() { ps -eo stat=,args= 2> /dev/null | grep -v '^Z' | grep -q '[r]ogue_surge\.sh'; }
 
-__bo_have() {                       # υπάρχει αρχείο με κάποιο από αυτά τα ονόματα;
-    local nm p
-    for nm in "$@"; do
-        for p in "$BLACKOUT_DIR/$nm" "$BLACKOUT_DIR"/*/"$nm" "$PWD/$nm" "$HOME/$nm"; do
-            [ -e "$p" ] && return 0
+# Έχει φτιάξει ο φοιτητής αρχείο με όνομα το κλειδί (touch ΚΛΕΙΔΙ);
+# Δεκτά: ΚΛΕΙΔΙ, [ΚΛΕΙΔΙ], κλειδί με μικρά. Ψάχνει στον φάκελο της αποστολής,
+# στους υποφακέλους του (1 επίπεδο), στον τρέχοντα φάκελο και στο home.
+__bo_flag() {
+    local nm="$1" d p
+    for d in "$BLACKOUT_DIR" "$BLACKOUT_DIR"/*/ "$PWD" "$HOME"; do
+        for p in "$nm" "[$nm]" "${nm,,}"; do
+            [ -e "${d%/}/$p" ] && return 0
         done
     done
     return 1
 }
 
-__bo_t1() {                         # έγινε tar -xzf του backup
-    local p
+__bo_t1() {                         # έγινε tar -xzf του backup + touch ALPHA_77
+    local p ok=1
     for p in "$BLACKOUT_DIR" "$PWD" "$HOME"; do
-        [ -f "$p/temp_backup/auth_key.txt" ] && return 0
+        [ -f "$p/temp_backup/auth_key.txt" ] && ok=0
     done
-    return 1
+    [ "$ok" -eq 0 ] && __bo_flag ALPHA_77
 }
 
-__bo_t2() { __bo_have OMEGA_99 omega_99 "[OMEGA_99]"; }     # touch <node ID>
+__bo_t2() { __bo_flag OMEGA_99; }                          # touch <node ID>
 
-__bo_t3() { [ -f "$BLACKOUT_STATE/rogue_started" ] && ! __bo_rogue_alive; }
+__bo_t3() {                         # η rogue δεν τρέχει πια + touch SURG3_K1LL3R
+    [ -f "$BLACKOUT_STATE/rogue_started" ] && ! __bo_rogue_alive && __bo_flag SURG3_K1LL3R
+}
 
-__bo_t4() { [ -f "$BLACKOUT_STATE/reboot_ok" ] && [ -x "$BLACKOUT_DIR/reboot.sh" ]; }
+__bo_t4() {                         # το reboot.sh έτρεξε με επιτυχία + touch CHM0D_M4STER
+    [ -f "$BLACKOUT_STATE/reboot_ok" ] && [ -x "$BLACKOUT_DIR/reboot.sh" ] && __bo_flag CHM0D_M4STER
+}
 
-__bo_t5() {                         # το .c κάνει compile και βγάζει 231.00 V + flag
+__bo_t5() {                         # το .c κάνει compile, βγάζει 231.00 V + flag, και touch C_H4CKER
     local src="$BLACKOUT_DIR/voltage_regulator.c" stamp="$BLACKOUT_STATE/t5stamp" tmp out
+    __bo_flag C_H4CKER || return 1
     [ -f "$src" ] || return 1
     # Μην ξανακάνεις compile αν το αρχείο δεν άλλαξε από τον τελευταίο έλεγχο.
     if [ -f "$stamp" ] && [ ! "$src" -nt "$stamp" ]; then return 1; fi
